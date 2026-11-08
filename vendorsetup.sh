@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 #	This file is part of the OrangeFox Recovery Project
 # 	Copyright (C) 2024-2025 The OrangeFox Recovery Project
@@ -18,32 +19,64 @@
 # 	Please maintain this if you use this script or any part of it
 #
 
-#set -o xtrace
-FDEVICE="INOI_A75"
-
 fetch_mt6789_common_repo() {
-	local URL=https://github.com/idabgsram/recovery-device_alldocube_mt6789-common.git
-	local common=device/alldocube/mt6789-common
-	if [ ! -d $common ]; then
+	local URL=https://github.com/ramabondanp/twrp-device_transsion_mt6789-common.git
+	local common="$1/device/transsion/mt6789-common"
+	if [ ! -d "$common" ]; then
 		echo "Cloning $URL ... to $common"
-		git clone $URL -b twrp-12.1 $common
+		git clone "$URL" -b twrp-16.0-tos16 "$common" || return 1
 	else
 		echo "Device common repository: \"$common\" found ..."
 	fi
+	if [ ! -e "$common/.git" ]; then
+		echo "ERROR: $common is not a Git checkout." >&2
+		return 1
+	fi
+	local branch
+	branch=$(git -C "$common" branch --show-current) || return 1
+	if [ "$branch" != twrp-16.0-tos16 ]; then
+		echo "ERROR: Common tree must be on twrp-16.0-tos16 (found: ${branch:-detached HEAD})." >&2
+		return 1
+	fi
 }
 
-# Clone to fix build on minimal manifest
-git clone https://android.googlesource.com/platform/external/gflags/ -b android-12.1.0_r4 external/gflags
+apply_INOI_A75_patch() {
+	local tree="$1"
+	local patch="$2"
+	if [ ! -f "$patch" ]; then
+		return 0
+	fi
+	if git -C "$tree" apply --reverse --check "$patch" >/dev/null 2>&1; then
+		echo "Already applied: $(basename "$patch")"
+	elif git -C "$tree" apply --check "$patch"; then
+		git -C "$tree" apply "$patch" || return 1
+		echo "Applied: $(basename "$patch")"
+	else
+		echo "ERROR: Cannot apply $patch to $tree; resolve the conflict first." >&2
+		return 1
+	fi
+}
 
-# mt6789-common
-fetch_mt6789_common_repo
+setup_INOI_A75() {
+	local root
+	root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd) || return 1
 
-# ccache
-export USE_CCACHE=1
-export CCACHE_EXEC=/usr/bin/ccache
-export CCACHE_MAXSIZE="10G"
-export CCACHE_DIR=".ccache"
+	# Clone to fix build on minimal manifest
+	if [ ! -d "$root/external/gflags" ]; then
+		git clone https://android.googlesource.com/platform/external/gflags/ -b android-12.1.0_r4 "$root/external/gflags" || return 1
+	else
+		echo "Dependency: \"external/gflags\" found ..."
+	fi
 
-if [ ! -d ${CCACHE_DIR} ]; then
-	mkdir $CCACHE_DIR
-fi
+	# mt6789-common
+	fetch_mt6789_common_repo "$root" || return 1
+
+	# Patches
+	apply_INOI_A75_patch "$root/bootable/recovery" \
+		"$root/device/transsion/mt6789-common/patches/0002-Respect-disabled-repacking.patch" || return 1
+	apply_INOI_A75_patch "$root/build/make" \
+		"$root/device/transsion/mt6789-common/patches/0001-Add-zstd-ramdisk-compression.patch" || return 1
+	echo "OK: All patched"
+}
+
+setup_INOI_A75

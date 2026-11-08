@@ -1,0 +1,195 @@
+name: TeamWin-TWRP
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEPLOY_TYPE:
+        description: 'Deploy Type (BETA/UNOFFICIAL/OFFICIAL)'
+        required: true
+        default: 'UNOFFICIAL'
+        type: choice
+        options: 
+        - 'BETA'
+        - 'UNOFFICIAL'
+        - 'OFFICIAL'
+      MANIFEST_URL:
+        description: 'MANIFEST_URL'
+        required: true
+        default: 'https://github.com/TWRP-Test/platform_manifest_twrp_aosp'
+      MANIFEST_BRANCH:
+        description: 'MANIFEST_BRANCH'
+        required: true
+        default: 'twrp-16.0'
+        type: choice
+        options:
+        - 'twrp-16.0'
+      DEVICE_TREE_URL:
+        description: 'DEVICE_TREE_URL'
+        required: true
+        default: 'https://github.com/sysretq0/recovery-device_inoi_INOI_A75'
+      DEVICE_TREE_BRANCH:
+        description: 'DEVICE_TREE_BRANCH'
+        required: true
+        default: 'a16-common'
+      DEVICE_PATH:
+        description: 'DEVICE_PATH'
+        required: true
+        default: 'device/inoi/INOI_A75'
+      DEVICE_NAME:
+        description: 'DEVICE_NAME'
+        required: true
+        default: 'INOI_A75'
+      COMMON_TREE_URL:
+        description: 'COMMON_TREE_URL'
+        required: true
+        default: 'https://github.com/ramabondanp/twrp-device_transsion_mt6789-common'
+      COMMON_TREE_BRANCH:
+        description: 'COMMON_TREE_BRANCH'
+        required: true
+        default: 'twrp-16.0-tos16'
+      COMMON_PATH:
+        description: 'COMMON_PATH'
+        required: true
+        default: 'device/transsion/mt6789-common'
+      MAKEFILE_NAME:
+        description: 'MAKEFILE_NAME'
+        required: true
+        default: 'twrp_INOI_A75'
+      BUILD_TARGET:
+        description: 'BUILD_TARGET'
+        required: true
+        default: 'vendor_boot'
+        type: choice
+        options:
+        - 'boot'
+        - 'recovery'
+        - 'vendor_boot'
+      APPLY_PATCH:
+        description: 'Apply diff.patch'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+        
+jobs:
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Display Run Parameters
+      run: |
+        echo "::group::User Environment Variables"
+        echo "Manifest URL: ${{ github.event.inputs.MANIFEST_URL }}"
+        echo "Manifest Branch: ${{ github.event.inputs.MANIFEST_BRANCH }}"
+        echo "Device Tree URL: ${{ github.event.inputs.DEVICE_TREE_URL }}"
+        echo "Device Tree Branch: ${{ github.event.inputs.DEVICE_TREE_BRANCH }}"
+        echo "Device Path: ${{ github.event.inputs.DEVICE_PATH }}"
+        echo "Device Name: ${{ github.event.inputs.DEVICE_NAME }}"
+        echo "Common Tree URL: ${{ github.event.inputs.COMMON_TREE_URL }}"
+        echo "Common Tree Branch: ${{ github.event.inputs.COMMON_TREE_BRANCH }}"
+        echo "Common Path: ${{ github.event.inputs.COMMON_PATH }}"
+        echo "Makefile Name: ${{ github.event.inputs.MAKEFILE_NAME }}"
+        echo "Build Target: ${{ github.event.inputs.BUILD_TARGET }}.img"
+        echo "::endgroup::"
+ 
+    - name: Check Out
+      uses: actions/checkout@v4
+
+    - name: Cleanup
+      uses: rokibhasansagar/slimhub_actions@main
+
+    - name: Prepare the environment
+      run: |
+        sudo apt update
+        DEBIAN_FRONTEND=noninteractive sudo apt install -yq --no-install-recommends \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib git git-lfs gnupg gperf \
+            imagemagick lib32ncurses-dev lib32z1-dev libc6-dev libcap-dev libexpat1-dev \
+            libgl1-mesa-dev libglu1-mesa-dev liblz4-tool libncurses-dev libncurses6 libssl-dev \
+            libxml2-dev libxml2-utils lzop ncftp patch patchelf pkg-config pngcrush \
+            python-is-python3 python3 python3-dev rsync schedtool squashfs-tools \
+            tree unzip wget xsltproc zip zlib1g-dev
+
+    - name: Install OpenJDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+
+    - name: Install repo
+      run: |
+        mkdir ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        sudo ln -sf ~/bin/repo /usr/bin/repo
+      
+    - name: Initialize repo
+      run: |
+        mkdir workspace
+        cd workspace
+        echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
+        git config --global user.name "sysretq0"
+        git config --global user.email "324514544+sysretq0@users.noreply.github.com"
+        repo init --depth=1 -u ${{ github.event.inputs.MANIFEST_URL }} -b ${{ github.event.inputs.MANIFEST_BRANCH }}
+      id: pwd
+          
+    - name: Repo Sync
+      run: |
+        repo sync -j$(nproc --all) --force-sync
+      working-directory: workspace
+      
+    - name: Clone device tree
+      run: |
+        git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Clone common tree
+      run: |
+        git clone ${{ github.event.inputs.COMMON_TREE_URL }} -b ${{ github.event.inputs.COMMON_TREE_BRANCH }} ./${{ github.event.inputs.COMMON_PATH }}
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      
+
+    - name: Set Swap Space
+      uses: pierotofy/set-swap-space@master
+      with:
+        swap-size-gb: 50
+    
+    - name: Apply custom diff.patch
+      if: github.event.inputs.APPLY_PATCH == 'true'
+      run: |
+        [ -f ${GITHUB_WORKSPACE}/workspace/${{ github.event.inputs.DEVICE_PATH }}/patches/apply-patches.sh ] && bash ${GITHUB_WORKSPACE}/workspace/${{ github.event.inputs.DEVICE_PATH }}/patches/apply-patches.sh || echo 'no device patches'
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+      continue-on-error: true
+
+    - name: Building recovery
+      run: |
+        source build/envsetup.sh
+        export ALLOW_MISSING_DEPENDENCIES=true
+        lunch ${{ github.event.inputs.MAKEFILE_NAME }}
+        mka vendorbootimage
+      working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+    - name: Check the output directory before uploading
+      run: |
+        ls -al workspace/out/target/product/
+        echo
+        ls -al workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/
+  
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: | 
+          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_TARGET }}.img
+          workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/ramdisk*
+        name: TeamWin-TWRP-${{ github.event.inputs.DEPLOY_TYPE }}-${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
+        tag_name: ${{ github.run_id }}
+        body: |
+          Manifest: ${{ github.event.inputs.MANIFEST_BRANCH }}
+          Device: ${{ github.event.inputs.DEVICE_NAME }}
+          Deploy Type: ${{ github.event.inputs.DEPLOY_TYPE }}
+          Target: ${{ github.event.inputs.BUILD_TARGET }}.img
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
