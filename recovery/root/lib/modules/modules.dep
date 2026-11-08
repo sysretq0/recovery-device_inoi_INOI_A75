@@ -51,7 +51,9 @@
 /lib/modules/meta.ko:
 /lib/modules/mkp.ko: /lib/modules/mrdump.ko
 /lib/modules/mmprofile.ko: /lib/modules/aee_aed.ko
-/lib/modules/mmqos-common.ko: /lib/modules/mtk-mmdvfs-debug.ko /lib/modules/mtk-mmdvfs.ko /lib/modules/mtk_dramc.ko /lib/modules/mtk-icc-core.ko /lib/modules/mmprofile.ko /lib/modules/mtk-smi-dbg.ko /lib/modules/emi.ko /lib/modules/emi-mpu.ko /lib/modules/mtk-smi.ko /lib/modules/mrdump.ko /lib/modules/clk-common.ko /lib/modules/aee_aed.ko
+/lib/modules/mm-monitor-platform-mt6789.ko:
+/lib/modules/mtk-mm-monitor-controller.ko: /lib/modules/mm-monitor-platform-mt6789.ko /lib/modules/mtk-smi.ko
+/lib/modules/mmqos-common.ko: /lib/modules/mtk-mm-monitor-controller.ko /lib/modules/mtk-mmdvfs-debug.ko /lib/modules/mtk-mmdvfs.ko /lib/modules/mtk_dramc.ko /lib/modules/mtk-icc-core.ko /lib/modules/mmprofile.ko /lib/modules/mtk-smi-dbg.ko /lib/modules/emi.ko /lib/modules/emi-mpu.ko /lib/modules/mtk-smi.ko /lib/modules/mrdump.ko /lib/modules/clk-common.ko /lib/modules/aee_aed.ko
 /lib/modules/mmqos-mt6789.ko: /lib/modules/mmqos-common.ko /lib/modules/mtk-mmdvfs-debug.ko /lib/modules/mtk-mmdvfs.ko /lib/modules/mtk_dramc.ko /lib/modules/mtk-icc-core.ko /lib/modules/mmprofile.ko /lib/modules/mtk-smi-dbg.ko /lib/modules/emi.ko /lib/modules/emi-mpu.ko /lib/modules/mtk-smi.ko /lib/modules/mrdump.ko /lib/modules/clk-common.ko /lib/modules/aee_aed.ko
 /lib/modules/monitor_hang.ko: /lib/modules/mrdump.ko
 /lib/modules/mrdump.ko:

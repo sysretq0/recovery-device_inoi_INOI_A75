@@ -48,6 +48,8 @@ mtk-icc-core.ko
 mmprofile.ko
 mtk-mmdvfs.ko
 mtk-mmdvfs-debug.ko
+mm-monitor-platform-mt6789.ko
+mtk-mm-monitor-controller.ko
 mmqos-common.ko
 mmqos-mt6789.ko
 iommu_secure.ko
