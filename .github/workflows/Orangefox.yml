@@ -1,0 +1,179 @@
+name: OrangeFox-OFRP
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEPLOY_TYPE:
+        description: 'Deploy Type (BETA/UNOFFICIAL/OFFICIAL)'
+        required: true
+        default: 'UNOFFICIAL'
+        type: choice
+        options:
+          - 'BETA'
+          - 'UNOFFICIAL'
+          - 'OFFICIAL'
+      SYNC_URL:
+        description: 'SYNC_URL'
+        required: true
+        default: 'https://gitlab.com/OrangeFox/sync.git'
+      MANIFEST_BRANCH:
+        description: 'MANIFEST_BRANCH'
+        required: true
+        default: '14.1'
+        type: choice
+        options:
+          - '12.1'
+          - '14.1'
+      DEVICE_TREE_URL:
+        description: 'DEVICE_TREE_URL'
+        required: true
+        default: 'https://github.com/sysretq0/recovery-device_inoi_INOI_A75'
+      DEVICE_TREE_BRANCH:
+        description: 'DEVICE_TREE_BRANCH'
+        required: true
+        default: 'a16-common'
+      DEVICE_PATH:
+        description: 'DEVICE_PATH'
+        required: true
+        default: 'device/inoi/INOI_A75'
+      DEVICE_NAME:
+        description: 'DEVICE_NAME'
+        required: true
+        default: 'INOI_A75'
+      COMMON_TREE_URL:
+        description: 'COMMON_TREE_URL'
+        required: true
+        default: 'https://github.com/ramabondanp/twrp-device_transsion_mt6789-common'
+      COMMON_TREE_BRANCH:
+        description: 'COMMON_TREE_BRANCH'
+        required: true
+        default: 'twrp-16.0-tos16'
+      COMMON_PATH:
+        description: 'COMMON_PATH'
+        required: true
+        default: 'device/transsion/mt6789-common'
+      MAKEFILE_NAME:
+        description: 'MAKEFILE_NAME'
+        required: true
+        default: 'twrp_INOI_A75'
+      BUILD_TARGET:
+        description: 'BUILD_TARGET'
+        required: true
+        default: 'vendor_boot'
+        type: choice
+        options:
+          - 'boot'
+          - 'recovery'
+          - 'vendor_boot'
+      APPLY_PATCH:
+        description: 'Apply diff.patch'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check Out
+        uses: actions/checkout@v3
+
+      - name: Cleanup
+        uses: rokibhasansagar/slimhub_actions@main
+
+      - name: Initialize workspace
+        run: |
+          mkdir workspace
+          cd workspace
+          echo "workspace-folder=$(pwd)" >> $GITHUB_OUTPUT
+        id: pwd
+
+      - name: Prepare the build environment
+        run: |
+          sudo apt install git aria2 ccache -y
+          git clone https://gitlab.com/OrangeFox/misc/scripts
+          cd scripts
+          sudo bash setup/android_build_env.sh
+          sed -i 's/cd -/cd ../g' setup/install_android_sdk.sh
+          sudo bash setup/install_android_sdk.sh
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+          echo "CCACHE_EXEC=$(which ccache)" >> $GITHUB_ENV
+          ccache -M 5G
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+      - name: Cache OrangeFox
+        uses: actions/cache@v3
+        id: of_cache
+        with:
+          path: |
+            ${{ steps.pwd.outputs.workspace-folder }}/OrangeFox*
+            ${{ steps.pwd.outputs.workspace-folder }}/fox_*
+          key: ${{ runner.os }}-orangefox-${{ github.event.inputs.MANIFEST_BRANCH }}-${{ hashFiles('**/Orangefox.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-orangefox-${{ github.event.inputs.MANIFEST_BRANCH }}-
+
+      - name: Sync OrangeFox
+        run: |
+          git config --global user.name "sysretq0"
+          git config --global user.email "324514544+sysretq0@users.noreply.github.com"
+          python3 <(curl -s https://gitlab.com/OrangeFox/sync.git/-/raw/master/orangefox_sync.py) --branch ${{ github.event.inputs.MANIFEST_BRANCH }} --path ${{ steps.pwd.outputs.workspace-folder }}
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+      - name: Clone device tree
+        run: |
+          git clone ${{ github.event.inputs.DEVICE_TREE_URL }} -b ${{ github.event.inputs.DEVICE_TREE_BRANCH }} ./${{ github.event.inputs.DEVICE_PATH }}
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+      - name: Clone common tree
+        run: |
+          git clone ${{ github.event.inputs.COMMON_TREE_URL }} -b ${{ github.event.inputs.COMMON_TREE_BRANCH }} ./${{ github.event.inputs.COMMON_PATH }}
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 50
+
+      - name: Apply custom diff.patch
+        if: github.event.inputs.APPLY_PATCH == 'true'
+        run: |
+          [ -f ${GITHUB_WORKSPACE}/workspace/${{ github.event.inputs.DEVICE_PATH }}/patches/apply-patches.sh ] && bash ${GITHUB_WORKSPACE}/workspace/${{ github.event.inputs.DEVICE_PATH }}/patches/apply-patches.sh || echo 'no device patches'
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+        continue-on-error: true
+
+      - name: Building recovery
+        run: |
+          source build/envsetup.sh
+          export ALLOW_MISSING_DEPENDENCIES=true
+          export FOX_USE_TWRP_RECOVERY_IMAGE_BUILDER=1
+          lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng && make clean && mka vendorbootimage
+        working-directory: ${{ steps.pwd.outputs.workspace-folder }}
+
+      - name: Check the output directory before uploading
+        run: |
+          ls -al workspace/out/target/product/
+          echo
+          ls -al workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/${{ github.event.inputs.BUILD_TARGET }}.img
+            workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/OrangeFox*.zip
+            workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/ramdisk*
+          name: OrangeFox-OFRP-${{ github.event.inputs.DEPLOY_TYPE }}-${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
+          tag_name: ${{ github.run_id }}
+          body: |
+            Manifest: ${{ github.event.inputs.MANIFEST_BRANCH }}
+            Device: ${{ github.event.inputs.DEVICE_NAME }}
+            Deploy Type: ${{ github.event.inputs.DEPLOY_TYPE }}
+            Target: ${{ github.event.inputs.BUILD_TARGET }}.img
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -4,11 +4,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+# Inherit from the A16 mt6789 common
+$(call inherit-product, device/transsion/mt6789-common/common.mk)
+
 # Inherit from INOI_A75 device
 $(call inherit-product, device/inoi/INOI_A75/device.mk)
-
-# Inherit some common TWRP stuff.
-$(call inherit-product, vendor/twrp/config/common.mk)
 
 # Product Specifics
 PRODUCT_NAME := twrp_INOI_A75

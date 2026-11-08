@@ -5,4 +5,4 @@
 #
 
 # Inherit from mt6789-common
-$(call inherit-product, device/alldocube/mt6789-common/common.mk)
+$(call inherit-product, device/transsion/mt6789-common/common.mk)

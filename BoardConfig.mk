@@ -7,7 +7,7 @@
 DEVICE_PATH := device/inoi/INOI_A75
 
 # Inherit from mt6789-common
-include device/alldocube/mt6789-common/BoardConfigCommon.mk
+include device/transsion/mt6789-common/BoardConfigCommon.mk
 
 # Assert
 TARGET_OTA_ASSERT_DEVICE := INOI_A75,A750,INOI_A75_Elegance
